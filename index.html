@@ -1,1 +1,229 @@
+<!DOCTYPE html>
+<html lang="ja">
 
+<head>
+  <meta charset="UTF-8">
+  <title>URLテキストコピーツール</title>
+  <style>
+    * {
+      font-family: "游ゴシック";
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Helvetica Neue', sans-serif;
+      display: flex;
+      height: 100vh;
+      background-color: #f9f9f9;
+      color: #333;
+    }
+
+    .main {
+      flex: 1;
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+    }
+
+    .sidebar {
+      width: 250px;
+      background-color: #fff;
+      border-left: 1px solid #ddd;
+      padding: 20px;
+      box-shadow: -2px 0 5px rgba(0, 0, 0, 0.05);
+    }
+
+    h2 {
+      margin-bottom: 14px;
+      font-weight: 500;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    textarea {
+      width: 100%;
+      height: 240px;
+      /* ← 倍に */
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      resize: none;
+    }
+
+    button {
+      padding: 10px 16px;
+      font-size: 14px;
+      border: none;
+      border-radius: 6px;
+      background-color: #0078d4;
+      color: white;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+
+    button:hover {
+      background-color: #005fa3;
+    }
+
+    /* コピー済み時のスタイル */
+    .copied {
+      background-color: #28a745 !important;
+      /* 緑 */
+    }
+
+    .template-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .template-list li {
+      padding: 8px 12px;
+      margin-bottom: 6px;
+      background-color: #f0f0f0;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .template-list li:hover {
+      background-color: #e0e0e0;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="main">
+    <h2>URLテキストコピーツール</h2>
+
+    <!-- 見出し直下・横並び -->
+    <div class="actions">
+      <button id="copyTextBtn">テキストをコピー</button>
+      <button id="copyLinkBtn">コピー用URLをコピー</button>
+    </div>
+
+    <textarea id="textBox" placeholder="ここにテキストが表示されます"></textarea>
+  </div>
+
+  <div class="sidebar">
+    <h3>テンプレート一覧</h3>
+    <ul class="template-list">
+      <li>[today(yyyymmdd)]</li>
+      <li>[today(yyyy/mm/dd)]</li>
+      <li>[today(yyyy年m月d日)]</li>
+      <li>[yesterday(yyyymmdd)]</li>
+      <li>[yesterday(yyyy/mm/dd)]</li>
+      <li>[yesterday(yyyy年m月d日)]</li>
+      <li>[thismonth(m)]</li>
+      <li>[nextmonth(m)]</li>
+    </ul>
+  </div>
+
+  <script>
+    const textBox = document.getElementById('textBox');
+    const copyLinkBtn = document.getElementById('copyLinkBtn');
+    const copyTextBtn = document.getElementById('copyTextBtn');
+
+    // 日付置換関数
+    function replaceDatePlaceholders(text) {
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      const m = today.getMonth() + 1;
+      const d = today.getDate();
+
+      // 昨日（月曜なら金曜）
+      const yesterday = new Date(today);
+      const dayOfWeek = today.getDay();
+      if (dayOfWeek === 1) {
+        yesterday.setDate(today.getDate() - 3);
+      } else {
+        yesterday.setDate(today.getDate() - 1);
+      }
+      const y_yyyy = yesterday.getFullYear();
+      const y_mm = String(yesterday.getMonth() + 1).padStart(2, '0');
+      const y_dd = String(yesterday.getDate()).padStart(2, '0');
+      const y_m = yesterday.getMonth() + 1;
+      const y_d = yesterday.getDate();
+
+      // 今月・来月
+      const thisMonth = today.getMonth() + 1;
+      let nextMonth = today.getMonth() + 2;
+      if (nextMonth > 12) nextMonth = 1;
+
+      return text
+        .replace(/\[today\(yyyymmdd\)\]/g, `${yyyy}${mm}${dd}`)
+        .replace(/\[today\(yyyy\/mm\/dd\)\]/g, `${yyyy}/${mm}/${dd}`)
+        .replace(/\[today\(yyyy年m月d日\)\]/g, `${yyyy}年${m}月${d}日`)
+        .replace(/\[yesterday\(yyyymmdd\)\]/g, `${y_yyyy}${y_mm}${y_dd}`)
+        .replace(/\[yesterday\(yyyy\/mm\/dd\)\]/g, `${y_yyyy}/${y_mm}/${y_dd}`)
+        .replace(/\[yesterday\(yyyy年m月d日\)\]/g, `${y_yyyy}年${y_m}月${y_d}日`)
+        .replace(/\[thismonth\(m\)\]/g, `${thisMonth}`)
+        .replace(/\[nextmonth\(m\)\]/g, `${nextMonth}`);
+    }
+
+    // ボタン変化付きコピー処理
+    function flashCopied(button, textWhenCopied = "コピーしました！", duration = 1400) {
+      const originalText = button.textContent;
+      button.textContent = textWhenCopied;
+      button.classList.add("copied");
+      setTimeout(() => {
+        button.textContent = originalText;
+        button.classList.remove("copied");
+      }, duration);
+    }
+
+    // コピー処理＋閉じる
+    function copyProcessedText(text, button) {
+      const replacedText = replaceDatePlaceholders(text);
+      return navigator.clipboard.writeText(replacedText).then(() => {
+        flashCopied(button);
+      });
+    }
+
+    // 初期処理（ハッシュがあれば読み込み＆コピー）
+    window.addEventListener('DOMContentLoaded', () => {
+      const hashText = decodeURIComponent(location.hash.slice(1));
+      if (hashText) {
+        textBox.value = hashText;
+        copyProcessedText(hashText, copyTextBtn);
+      }
+    });
+
+    // 「テキストをコピー」
+    copyTextBtn.addEventListener('click', () => {
+      copyProcessedText(textBox.value, copyTextBtn);
+    });
+
+    // 「コピー用URLをコピー」
+    copyLinkBtn.addEventListener('click', () => {
+      const rawText = textBox.value;
+      const encodedText = encodeURIComponent(rawText);
+      const baseUrl = location.origin + location.pathname;
+      const fullUrl = `${baseUrl}#${encodedText}`;
+      navigator.clipboard.writeText(fullUrl).then(() => {
+        // アドレスバーのURLを置き換え
+        history.replaceState(null, "", fullUrl);
+        flashCopied(button);
+      });
+    });
+
+    // テンプレート挿入
+    document.querySelectorAll('.template-list li').forEach(item => {
+      item.addEventListener('click', () => {
+        textBox.value += (textBox.value ? '\n' : '') + item.textContent;
+        textBox.focus();
+      });
+    });
+  </script>
+</body>
+
+</html>
