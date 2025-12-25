@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>テキスト整形ツール</title>
+    <style>
+        body {
+            font-family: "Yu Gothic", sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #fff;
+            color: #111;
+        }
+
+        /* 操作部分 */
+        .controls {
+            background: #fff;
+            padding: 12px 20px;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+        }
+
+        .controls h1 {
+            font-size: 16px;
+            font-weight: normal;
+            margin: 0;
+            color: #333;
+        }
+
+        .control-group {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* ラジオボタン */
+        .radio-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .radio-group input[type="radio"] {
+            display: none;
+        }
+
+        .radio-group label {
+            cursor: pointer;
+            padding: 4px 10px;
+            border: 1px solid #333;
+            border-radius: 4px;
+            user-select: none;
+            transition: all 0.2s ease;
+        }
+
+        .radio-group input[type="radio"]:checked+label {
+            background: #111;
+            color: #fff;
+        }
+
+        /* スライダー */
+        .slider-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        input[type="range"] {
+            width: 150px;
+            height: 4px;
+            background: #ddd;
+            border-radius: 2px;
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #111;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            background: #555;
+        }
+
+        /* コピー ボタン */
+        #copyBtn {
+            padding: 6px 14px;
+            border: 1px solid #333;
+            background: #fff;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+
+        #copyBtn:hover {
+            background: #111;
+            color: #fff;
+        }
+
+        /* テキストエリアエリア */
+        .area {
+            display: flex;
+            flex-direction: row;
+            height: calc(100vh - 100px);
+            padding: 20px;
+            gap: 20px;
+            box-sizing: border-box;
+        }
+
+        textarea {
+            flex: 1;
+            padding: 14px;
+            font-size: 14px;
+            line-height: 1.6;
+            border: 1px solid #ccc;
+            outline: none;
+            resize: none;
+            border-radius: 6px;
+            margin: 0 10px;
+            box-sizing: border-box;
+        }
+
+        #output {
+            background: #f5f5f5;
+        }
+
+        #wrapWidthValue {
+            font-weight: bold;
+        }
+
+        /* レスポンシブ（スマホ用） */
+        @media (max-width: 768px) {
+            .area {
+                flex-direction: column;
+                height: auto;
+            }
+
+            textarea {
+                height: auto;
+                min-height: 40vh;
+                margin: 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="controls">
+        <h1>テキスト整形</h1>
+        <div class="control-group">
+            <div class="radio-group">
+                <input type="radio" id="half" name="width" value="half" checked>
+                <label for="half">英数字 半角</label>
+                <input type="radio" id="full" name="width" value="full">
+                <label for="full">英数字 全角</label>
+            </div>
+            <div class="slider-label">
+                改行幅:
+                <input type="range" id="wrapWidth" min="20" max="80" value="36">
+                <span id="wrapWidthValue">36</span>文字
+            </div>
+            <button id="copyBtn">コピー</button>
+        </div>
+    </div>
+
+    <div class="area">
+        <textarea id="input" placeholder="ここに文章を入力"></textarea>
+        <textarea id="output" readonly></textarea>
+    </div>
+
+    <script>
+        const inputEl = document.getElementById("input");
+        const outputEl = document.getElementById("output");
+        const copyBtn = document.getElementById("copyBtn");
+        const wrapWidthEl = document.getElementById("wrapWidth");
+        const wrapWidthValue = document.getElementById("wrapWidthValue");
+        const radios = document.querySelectorAll("input[name='width']");
+
+        // 禁則文字セット
+        const hangingChars = ";.､｡、。，．｣」』）〕］｝〉】";
+        const forbidStart = "]}):;?!ﾞﾟ･~：；？！゛゜‐’”）〕］｝〉」』】";
+        const forbidEndChars = "[{(‘“（〔［｛〈「『【0123456789０１２３４５６７８９";
+        const forbidEndSet = new Set(forbidEndChars.split(""));
+
+        function toHalfWidth(str) {
+            return str.replace(/[！-～]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+        }
+        function toFullWidth(str) {
+            return str.replace(/[!-~]/g, c => String.fromCharCode(c.charCodeAt(0) + 0xFEE0));
+        }
+
+        // 全角=1, 半角=0.5 でカウント
+        function getWidth(ch) {
+            return ch.match(/[^\x01-\x7E]/) ? 1 : 0.5;
+        }
+
+        function formatText(text) {
+            let mode = document.querySelector("input[name='width']:checked").value;
+            if (mode === "half") text = toHalfWidth(text);
+            else text = toFullWidth(text);
+
+            let wrapWidth = parseFloat(wrapWidthEl.value);
+            let lines = [];
+            let line = "";
+            let lineLen = 0;
+
+            for (let i = 0; i < text.length; i++) {
+                let ch = text[i];
+                let w = getWidth(ch);
+
+                if (ch === "\n") {
+                    lines.push(line);
+                    line = ""; lineLen = 0;
+                    continue;
+                }
+
+                if (lineLen + w > wrapWidth) {
+                    // === 行末禁則処理（連続ブロック対応） ===
+                    let j = line.length - 1;
+                    while (j >= 0 && forbidEndSet.has(line[j])) j--;
+                    let endBlock = line.slice(j + 1);
+                    line = line.slice(0, j + 1);
+                    lines.push(line);
+                    line = endBlock + ch;
+                    lineLen = [...endBlock].reduce((a, c) => a + getWidth(c), 0) + w;
+                }
+                else {
+                    line += ch;
+                    lineLen += w;
+                }
+
+                // === 行頭禁則処理（連続ブロック対応） ===
+                if (line.length > 0 && forbidStart.includes(line[0])) {
+                    let k = 0;
+                    while (k < line.length && forbidStart.includes(line[k])) k++;
+                    let headBlock = line.slice(0, k);
+                    if (lines.length) {
+                        lines[lines.length - 1] += headBlock;
+                        line = line.slice(k);
+                        lineLen = [...line].reduce((a, c) => a + getWidth(c), 0);
+                    }
+                }
+
+                // === ぶら下げ処理 ===
+                if (lines.length && hangingChars.includes(ch) && line.length === 1) {
+                    lines[lines.length - 1] += ch;
+                    line = "";
+                    lineLen = 0;
+                }
+            }
+            if (line) lines.push(line);
+
+            return lines.join("\n");
+        }
+
+        function update() {
+            outputEl.value = formatText(inputEl.value);
+            wrapWidthValue.textContent = wrapWidthEl.value;
+        }
+        inputEl.addEventListener("input", () => setTimeout(update, 0));
+        wrapWidthEl.addEventListener("input", update);
+        radios.forEach(r => r.addEventListener("change", update));
+
+        copyBtn.addEventListener("click", () => {
+            outputEl.select();
+            document.execCommand("copy");
+            let originalText = copyBtn.textContent;
+            copyBtn.textContent = "完　了";
+            setTimeout(() => { copyBtn.textContent = originalText; }, 1000);
+        });
+    </script>
+</body>
+
+</html>
