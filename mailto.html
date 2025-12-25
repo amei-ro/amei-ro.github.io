@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <title>mailtoリンクジェネレーター</title>
+    <style>
+        * {
+            font-family: "游ゴシック";
+        }
+
+        body {
+            max-width: 800px;
+            /* 最大幅を800pxに設定 */
+            margin: 20px auto;
+            padding: 0 20px;
+            /* スマホなどの小さい画面での余白を追加 */
+        }
+
+        textarea,
+        input {
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 8px;
+            resize: none;
+            font-size: 20px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            /* ボタンのフォントサイズを調整 */
+        }
+
+        #output a {
+            word-break: break-all;
+            display: block;
+            /* リンクをブロック要素にしてクリックしやすく */
+            margin-top: 10px;
+            /* リンクの上に余白を追加 */
+        }
+    </style>
+</head>
+
+<body>
+    <h2>mailto</h2>
+
+    <label>To（改行で複数可）</label>
+    <textarea id="to" rows="1"></textarea>
+
+    <label>Cc（改行で複数可）</label>
+    <textarea id="cc" rows="1"></textarea>
+
+    <label>Bcc（改行で複数可）</label>
+    <textarea id="bcc" rows="1"></textarea>
+
+    <label>件名</label>
+    <input type="text" id="subject">
+
+    <label>本文</label>
+    <textarea id="body" rows="15"></textarea>
+
+    <button onclick="generateLink()">リンク生成</button>
+    <button onclick="generateAndCopy()">リンク生成＋コピー</button>
+
+    <h3>生成されたmailtoリンク</h3>
+    <div id="output"></div>
+
+    <label>メールリンクから各項目を復元</label>
+    <input type="text" id="inputLink" placeholder="mailtoリンクをここに貼り付けて「復元」をクリックしてください">
+    <button onclick="restoreLink()">復元</button> <!-- 復元ボタンを追加 -->
+
+    <script>
+        function generateLink() {
+            const to = document.getElementById("to").value.trim().split(/\r?\n/).filter(s => s).join(",");
+            const cc = document.getElementById("cc").value.trim().split(/\r?\n/).filter(s => s).join(",");
+            const bcc = document.getElementById("bcc").value.trim().split(/\r?\n/).filter(s => s).join(",");
+
+            // 改行のみをエンコードする関数
+            function encodeNewlinesOnly(str) {
+                return str.replace(/\r\n|\r|\n/g, match => encodeURIComponent(match));
+            }
+
+            const subjectRaw = document.getElementById("subject").value.trim();
+            const bodyRaw = document.getElementById("body").value;
+
+            const subject = encodeNewlinesOnly(subjectRaw);
+            const body = encodeNewlinesOnly(bodyRaw);
+
+            let params = [];
+            if (cc) params.push(`cc=${encodeURIComponent(cc)}`);
+            if (bcc) params.push(`bcc=${encodeURIComponent(bcc)}`);
+            if (subject) params.push(`subject=${subject}`);
+            if (body) params.push(`body=${body}`);
+
+            const mailto = `mailto:${encodeURIComponent(to)}${params.length ? '?' + params.join('&') : ''}`;
+
+            document.getElementById("output").innerHTML = `<a href="${mailto}">${mailto}</a>`;
+            return mailto;
+        }
+
+        function generateAndCopy() {
+            const link = generateLink();
+            navigator.clipboard.writeText(link).then(() => {
+                alert('リンクをコピーしました。');
+            }).catch(err => {
+                alert('コピーに失敗しました: ' + err);
+            });
+        }
+
+        function restoreLink() {
+            const inputLink = document.getElementById("inputLink").value.trim();
+            if (!inputLink.startsWith("mailto:")) {
+                alert("有効なmailtoリンクを入力してください。");
+                return;
+            }
+
+            const url = new URL(inputLink);
+            const to = decodeURIComponent(url.pathname); // mailtoの後の部分
+            const params = new URLSearchParams(url.search);
+
+            document.getElementById("to").value = to.split(",").join("\n"); // 改行で分割して復元
+            document.getElementById("cc").value = params.get("cc") ? decodeURIComponent(params.get("cc")).split(",").join("\n") : "";
+            document.getElementById("bcc").value = params.get("bcc") ? decodeURIComponent(params.get("bcc")).split(",").join("\n") : "";
+            document.getElementById("subject").value = params.get("subject") ? decodeURIComponent(params.get("subject")) : "";
+            document.getElementById("body").value = params.get("body") ? decodeURIComponent(params.get("body")) : "";
+        }
+    </script>
+</body>
+
+</html>
